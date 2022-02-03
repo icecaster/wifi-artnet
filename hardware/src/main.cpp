@@ -6,11 +6,11 @@
 #include <NeoPixelBus.h>
 #include <Preferences.h>
 #include <SPIFFS.h>
-#include <Wifi.h>
+#include <WiFi.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #define STATS 0
-#define MAX_ATTEMPTS 10
+#define MAX_ATTEMPTS 20
 
 Preferences preferences;
 String ssid;
@@ -93,8 +93,7 @@ void setup() {
   readNVS();
   startWifi();
   if (WiFi.getMode() == WIFI_STA) {
-    xTaskCreatePinnedToCore(showTask, "showTask", 3000, NULL, 2 | portPRIVILEGE_BIT, &showTaskHandle,
-                            SHOW_CORE);
+    xTaskCreatePinnedToCore(showTask, "showTask", 3000, NULL, 2 | portPRIVILEGE_BIT, &showTaskHandle, SHOW_CORE);
     startPixels();
     startArtnetDMX();
   }
@@ -138,29 +137,83 @@ void wifiReset(wifi_mode_t mode) {
 void startWifi() {
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
+
+  int n = WiFi.scanNetworks();
+  Serial.println("scan done");
+  if (n == 0) {
+      Serial.println("no networks found");
+  } else {
+    Serial.print(n);
+    Serial.println(" networks found");
+    for (int i = 0; i < n; ++i) {
+      // Print SSID and RSSI for each network found
+      Serial.print(i + 1);
+      Serial.print(": ");
+      Serial.print(WiFi.SSID(i));
+      Serial.print(" (");
+      Serial.print(WiFi.RSSI(i));
+      Serial.print(")");
+      Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN)?" ":"*");
+      delay(10);
+    }
+  }
+
   if (ssid != "") {
     uint8_t attempts = 0;
     wifiReset(WIFI_STA);
+
+    Serial.print("Connecting to WiFi ..");
+
+    if (password != "") {
+      WiFi.begin(ssid.c_str(), password.c_str());
+    } else {
+      WiFi.begin(ssid.c_str());
+    }
+
+    //WiFi.begin("uneven.surface", "uneven.surface123");
+    
+    
     while (WiFi.status() != WL_CONNECTED && attempts < MAX_ATTEMPTS) {
-#if DEBUG
-      Serial.print("Trying to connect to: ");
-      Serial.println(ssid);
-#endif
-      wifiReset(WIFI_STA);
-      if (password != "") {
-        WiFi.begin(ssid.c_str(), password.c_str());
-      } else {
-        WiFi.begin(ssid.c_str());
-      }
+      Serial.print('.');
+      delay(1000);
       attempts++;
     }
+
     if (attempts >= MAX_ATTEMPTS) {
       startHotspot();
     } else {
 #if DEBUG
       Serial.println("Connected to WiFi");
+      Serial.print("IP: ");
+      Serial.println(WiFi.localIP());
 #endif
     }
+
+  
+
+//     while (WiFi.status() != WL_CONNECTED && attempts < MAX_ATTEMPTS) {
+// #if DEBUG
+//       Serial.print("Trying to connect to: ");
+//       Serial.println(ssid);
+// #endif
+//       wifiReset(WIFI_STA);
+      
+//       if (password != "") {
+//         WiFi.begin(ssid.c_str(), password.c_str());
+//       } else {
+//         WiFi.begin(ssid.c_str());
+//       }
+//       Serial.println("No luck. Retrying.");
+//       delay(1000);
+//       attempts++;
+//     }
+//     if (attempts >= MAX_ATTEMPTS) {
+//       startHotspot();
+//     } else {
+// #if DEBUG
+//       Serial.println("Connected to WiFi");
+// #endif
+//     }
   } else {
     startHotspot();
   }
