@@ -8,9 +8,9 @@
 #include <SPIFFS.h>
 #include <WiFi.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #define STATS 0
-#define MAX_ATTEMPTS 20
+#define MAX_ATTEMPTS 10
 
 Preferences preferences;
 String ssid;
@@ -138,6 +138,7 @@ void startWifi() {
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
 
+#if DEBUG
   int n = WiFi.scanNetworks();
   Serial.println("scan done");
   if (n == 0) {
@@ -157,6 +158,7 @@ void startWifi() {
       delay(10);
     }
   }
+#endif
 
   if (ssid != "") {
     uint8_t attempts = 0;
@@ -170,9 +172,6 @@ void startWifi() {
       WiFi.begin(ssid.c_str());
     }
 
-    //WiFi.begin("uneven.surface", "uneven.surface123");
-    
-    
     while (WiFi.status() != WL_CONNECTED && attempts < MAX_ATTEMPTS) {
       Serial.print('.');
       delay(1000);
@@ -188,32 +187,6 @@ void startWifi() {
       Serial.println(WiFi.localIP());
 #endif
     }
-
-  
-
-//     while (WiFi.status() != WL_CONNECTED && attempts < MAX_ATTEMPTS) {
-// #if DEBUG
-//       Serial.print("Trying to connect to: ");
-//       Serial.println(ssid);
-// #endif
-//       wifiReset(WIFI_STA);
-      
-//       if (password != "") {
-//         WiFi.begin(ssid.c_str(), password.c_str());
-//       } else {
-//         WiFi.begin(ssid.c_str());
-//       }
-//       Serial.println("No luck. Retrying.");
-//       delay(1000);
-//       attempts++;
-//     }
-//     if (attempts >= MAX_ATTEMPTS) {
-//       startHotspot();
-//     } else {
-// #if DEBUG
-//       Serial.println("Connected to WiFi");
-// #endif
-//     }
   } else {
     startHotspot();
   }
@@ -248,17 +221,26 @@ void startServer() {
     }
   });
   // end of TODO
-  server.on("/", HTTP_GET,
-            [](AsyncWebServerRequest* request) { request->send(SPIFFS, "/index.html", "text/html"); });
-  server.on("/favicon-16x16.png", HTTP_GET,
-            [](AsyncWebServerRequest* request) { request->send(SPIFFS, "/favicon-16x16.png", "image/png"); });
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) { 
+    request->send(SPIFFS, "/index.html", "text/html"); 
+  });
+
+  server.on("/favicon-16x16.png", HTTP_GET, [](AsyncWebServerRequest* request) { 
+    request->send(SPIFFS, "/favicon-16x16.png", "image/png"); 
+  });
+
   server.on("/fonts/MaterialIcons.woff2", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->send(SPIFFS, "/fonts/MaterialIcons.woff2", "font/woff2");
   });
-  server.on("/js/app.js", HTTP_GET,
-            [](AsyncWebServerRequest* request) { request->send(SPIFFS, "/js/app.js", "text/javascript"); });
-  server.on("/css/app.css", HTTP_GET,
-            [](AsyncWebServerRequest* request) { request->send(SPIFFS, "/css/app.css", "text/css"); });
+
+  server.on("/js/app.js", HTTP_GET, [](AsyncWebServerRequest* request) { 
+    request->send(SPIFFS, "/js/app.js", "text/javascript"); 
+  });
+
+  server.on("/css/app.css", HTTP_GET, [](AsyncWebServerRequest* request) { 
+    request->send(SPIFFS, "/css/app.css", "text/css"); 
+  });
+
   server.on("/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
     settings.clear();
     settings["ssid"] = ssid;
@@ -272,20 +254,21 @@ void startServer() {
     serializeJson(settings, res);
     request->send(200, "application/json", res);
   });
+
   AsyncCallbackJsonWebHandler* handler =
-      new AsyncCallbackJsonWebHandler("/update", [](AsyncWebServerRequest* request, JsonVariant& json) {
-        JsonObject jsonObj = json.as<JsonObject>();
-        preferences.putString("ssid", jsonObj["ssid"].as<String>());
-        preferences.putString("password", jsonObj["password"].as<String>());
-        preferences.putString("nodeName", jsonObj["nodeName"].as<String>());
-        preferences.putInt("pixelSize", jsonObj["pixelSize"].as<int>());
-        preferences.putInt("pixelCount", jsonObj["pixelCount"].as<int>());
-        preferences.putInt("startUniverse", jsonObj["startUniverse"].as<int>());
-        preferences.putBool("sync", jsonObj["sync"].as<bool>());
-        request->send(201, "application/json", "{\"status\":\"ok\"}");
-        delay(1000);
-        ESP.restart();
-      });
+    new AsyncCallbackJsonWebHandler("/update", [](AsyncWebServerRequest* request, JsonVariant& json) {
+      JsonObject jsonObj = json.as<JsonObject>();
+      preferences.putString("ssid", jsonObj["ssid"].as<String>());
+      preferences.putString("password", jsonObj["password"].as<String>());
+      preferences.putString("nodeName", jsonObj["nodeName"].as<String>());
+      preferences.putInt("pixelSize", jsonObj["pixelSize"].as<int>());
+      preferences.putInt("pixelCount", jsonObj["pixelCount"].as<int>());
+      preferences.putInt("startUniverse", jsonObj["startUniverse"].as<int>());
+      preferences.putBool("sync", jsonObj["sync"].as<bool>());
+      request->send(201, "application/json", "{\"status\":\"ok\"}");
+      delay(1000);
+      ESP.restart();
+    });
   server.addHandler(handler);
   server.begin();
 }
