@@ -11,6 +11,7 @@
 #define DEBUG 0
 #define STATS 0
 #define MAX_ATTEMPTS 10
+#define FORMAT_SPIFFS_IF_FAILED true
 
 Preferences preferences;
 String ssid;
@@ -29,7 +30,7 @@ DNSServer dnsServer;
 Artnet artnet;
 int previousDataLength = 0;
 
-#define LED_PIN 2
+#define LED_PIN 12
 NeoPixelBus<NeoGrbwFeature, NeoEsp32I2s1800KbpsMethod>* rgbw = NULL;
 NeoPixelBus<NeoGrbFeature, NeoEsp32I2s1800KbpsMethod>* rgb = NULL;
 RgbwColor* rgbwColor = NULL;
@@ -84,6 +85,8 @@ void showTask(void* pvParameters) {
 }
 
 void setup() {
+
+
 #if DEBUG || STATS
   Serial.begin(115200);
 #endif
@@ -109,22 +112,29 @@ void loop() {
 }
 
 void readNVS() {
-  preferences.begin("wifi-node", false);
+  preferences.begin("artnet-node", false);
   ssid = preferences.getString("ssid", "");
   password = preferences.getString("password", "");
-  nodeName = preferences.getString("nodeName", "wifi-node");
-  pixelSize = preferences.getInt("pixelSize", 4);
+  nodeName = preferences.getString("nodeName", "Artnet-node");
+  pixelSize = preferences.getInt("pixelSize", 3);
   pixelCount = preferences.getInt("pixelCount", 60);
-  startUniverse = preferences.getInt("startUniverse", 0);
-  sync = preferences.getBool("sync", true);
+  startUniverse = preferences.getInt("startUniverse", 1);
+  sync = preferences.getBool("sync", false);
   totalChannels = pixelSize * pixelCount;
 #if DEBUG
+  Serial.print("SSID: ");
   Serial.println(ssid);
+  Serial.print("Password: ");
   Serial.println(password);
+  Serial.print("Node Name: ");
   Serial.println(nodeName);
+  Serial.print("Pixelsize: ");
   Serial.println(pixelSize);
+  Serial.print("Pixel count: ");
   Serial.println(pixelCount);
+  Serial.print("Universe: ");
   Serial.println(startUniverse);
+  Serial.print("Channels: ");
   Serial.println(totalChannels);
 #endif
 }
@@ -207,7 +217,12 @@ void startHotspot() {
 }
 
 void startServer() {
-  SPIFFS.begin();
+
+  if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
+    #if DEBUG
+      Serial.println("SPIFFS Mount Failed");
+    #endif
+  }
   // TODO: additional headers and 404 handler ?
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods",
@@ -322,6 +337,8 @@ void onDmxFrame(uint16_t universe, uint16_t length, uint8_t sequence, uint8_t* d
       Serial.print('.');
 #endif
     int led = i + (universe - startUniverse) * (previousDataLength / pixelSize);
+    //TODO: handle multiple universes
+    //see https://github.com/rstephan/ArtnetWifi/blob/master/examples/ArtnetWifiNeoPixel/ArtnetWifiNeoPixel.ino
     if (led < pixelCount) {
       if (pixelSize == 4) {
         rgbwColor->R = data[i * pixelSize];
