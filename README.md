@@ -30,7 +30,7 @@ npm install
 ### Develop web interace
 
 ```
-npm run serve
+
 ```
 
 ### Upload firmware

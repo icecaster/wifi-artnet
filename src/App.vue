@@ -3,8 +3,7 @@
     <b-navbar type="is-primary" transparent :mobile-burger="false">
       <template slot="brand">
         <b-navbar-item>
-          WiFi node by
-          <a class="pow" href="https://pow.cool" target="_blank">pow.cool</a>
+          Artnet Wifi node '<i>{{ nodeName }}</i>' 
         </b-navbar-item>
       </template>
     </b-navbar>
@@ -31,11 +30,6 @@
             :min="startUniverseMin"
           ></b-numberinput>
         </b-field>
-        <b-field label="ArtSync">
-          <b-switch v-model="sync" :rounded="false" size="is-medium">
-            {{ sync ? 'Yes' : 'No' }}
-          </b-switch>
-        </b-field>
         <b-field label="Pixel Count">
           <b-numberinput
             v-model="pixelCount"
@@ -43,12 +37,6 @@
             :min="pixelCountMin"
             :max="pixelCountMax"
           ></b-numberinput>
-        </b-field>
-        <b-field label="Pixel Type">
-          <b-select v-model="pixelSize" required placeholder="Please choose">
-            <option :value="4">RGBW</option>
-            <option :value="3">RGB</option>
-          </b-select>
         </b-field>
         <div class="buttons">
           <b-button type="is-primary" native-type="submit" :disabled="!valid">
@@ -83,11 +71,9 @@ export default {
     // will be overwritten by the settings api call
     ssid: '',
     password: '',
-    nodeName: 'wifi-node',
-    pixelSize: 4,
-    pixelCount: 60,
+    nodeName: 'artnet-wifi-node',
+    pixelCount: 100,
     startUniverse: 0,
-    sync: true,
   }),
   mounted() {
     this.init()
@@ -106,8 +92,7 @@ export default {
         this.ssid &&
         this.nodeName &&
         this.startUniverse !== null &&
-        this.pixelCount > 0 &&
-        this.pixelSize >= 3
+        this.pixelCount > 0 
       )
         this.valid = true
       else this.valid = false
@@ -118,18 +103,14 @@ export default {
         ssid,
         password,
         nodeName,
-        pixelSize,
         pixelCount,
         startUniverse,
-        sync,
       } = await res.json()
       this.ssid = ssid
       this.password = password
       this.nodeName = nodeName
-      this.pixelSize = pixelSize
       this.pixelCount = pixelCount
       this.startUniverse = startUniverse
-      this.sync = sync
       setTimeout(() => {
         this.loaded = true
       }, 1000)
@@ -138,10 +119,9 @@ export default {
       this.ssid = ''
       this.password = ''
       this.nodeName = 'wifi-node'
-      this.pixelSize = 4
-      this.pixelCount = 60
+      this.pixelCount = 170
       this.startUniverse = 0
-      this.sync = true
+
       await this.updateSettings()
     },
     async updateSettings() {
@@ -155,10 +135,8 @@ export default {
           ssid: this.ssid,
           password: this.password,
           nodeName: this.nodeName,
-          pixelSize: this.pixelSize,
           pixelCount: this.pixelCount,
           startUniverse: this.startUniverse,
-          sync: this.sync,
         }),
       })
       this.toast = true
@@ -177,12 +155,6 @@ export default {
 </script>
 
 <style lang="css" scoped>
-.pow {
-  color: #ffffff;
-  text-decoration: underline;
-  font-weight: bold;
-  margin-left: 5px;
-}
 .container {
   margin-top: 30px;
   padding: 0 10px;

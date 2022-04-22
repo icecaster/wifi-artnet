@@ -8,6 +8,7 @@
 #include <SPIFFS.h>
 #include <WiFi.h>
 
+#define LED_PIN 12
 #define DEBUG 0
 #define STATS 0
 #define MAX_ATTEMPTS 10
@@ -17,11 +18,13 @@ Preferences preferences;
 String ssid;
 String password;
 String nodeName;
-int pixelSize;
+//int pixelSize;
 int pixelCount;
 int startUniverse;
-bool sync;
+//bool sync;
 int totalChannels;
+int maxUniverses;
+bool universesReceived;
 StaticJsonDocument<256> settings;
 
 AsyncWebServer server(80);
@@ -30,11 +33,12 @@ DNSServer dnsServer;
 Artnet artnet;
 int previousDataLength = 0;
 
-#define LED_PIN 12
-NeoPixelBus<NeoGrbwFeature, NeoEsp32I2s1800KbpsMethod>* rgbw = NULL;
+
+//NeoPixelBus<NeoGrbwFeature, NeoEsp32I2s1800KbpsMethod>* rgbw = NULL;
 NeoPixelBus<NeoGrbFeature, NeoEsp32I2s1800KbpsMethod>* rgb = NULL;
-RgbwColor* rgbwColor = NULL;
+//RgbwColor* rgbwColor = NULL;
 RgbColor* rgbColor = NULL;
+
 
 #if STATS
 long lastSync;
@@ -48,7 +52,7 @@ void startArtnetDMX();
 void startServer();
 void startPixels();
 void onDmxFrame(uint16_t universe, uint16_t length, uint8_t sequence, uint8_t* data, IPAddress remoteIP);
-void onSync(IPAddress remoteIP);
+//void onSync(IPAddress remoteIP);
 
 // core to run Show()
 #define SHOW_CORE 0
@@ -75,10 +79,10 @@ void showTask(void* pvParameters) {
     // wait for the trigger
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // do the show (synchronously)
-    if (pixelSize == 4)
-      rgbw->Show();
-    else
-      rgb->Show();
+    //if (pixelSize == 4)
+    //  rgbw->Show();
+    //else
+    rgb->Show();
     // notify the calling task
     xTaskNotifyGive(userTaskHandle);
   }
@@ -116,11 +120,17 @@ void readNVS() {
   ssid = preferences.getString("ssid", "");
   password = preferences.getString("password", "");
   nodeName = preferences.getString("nodeName", "Artnet-node");
-  pixelSize = preferences.getInt("pixelSize", 3);
+  //pixelSize = preferences.getInt("pixelSize", 3);
   pixelCount = preferences.getInt("pixelCount", 60);
   startUniverse = preferences.getInt("startUniverse", 1);
-  sync = preferences.getBool("sync", false);
-  totalChannels = pixelSize * pixelCount;
+  //sync = preferences.getBool("sync", false);
+  totalChannels = 3 * pixelCount; //R+G+B=3
+
+  maxUniverses = (totalChannels / 512 + ((totalChannels % 512) ? 1 : 0));
+  //TODO FIX ERROR:
+  //expression must have pointer-to-object type but it has type "int"C/C++(142)
+  //universesReceived[maxUniverses];
+
 #if DEBUG
   Serial.print("SSID: ");
   Serial.println(ssid);
@@ -261,10 +271,8 @@ void startServer() {
     settings["ssid"] = ssid;
     settings["password"] = password;
     settings["nodeName"] = nodeName;
-    settings["pixelSize"] = pixelSize;
     settings["pixelCount"] = pixelCount;
     settings["startUniverse"] = startUniverse;
-    settings["sync"] = sync;
     String res;
     serializeJson(settings, res);
     request->send(200, "application/json", res);
@@ -276,10 +284,8 @@ void startServer() {
       preferences.putString("ssid", jsonObj["ssid"].as<String>());
       preferences.putString("password", jsonObj["password"].as<String>());
       preferences.putString("nodeName", jsonObj["nodeName"].as<String>());
-      preferences.putInt("pixelSize", jsonObj["pixelSize"].as<int>());
       preferences.putInt("pixelCount", jsonObj["pixelCount"].as<int>());
       preferences.putInt("startUniverse", jsonObj["startUniverse"].as<int>());
-      preferences.putBool("sync", jsonObj["sync"].as<bool>());
       request->send(201, "application/json", "{\"status\":\"ok\"}");
       delay(1000);
       ESP.restart();
@@ -299,16 +305,18 @@ void startArtnetDMX() {
     } else {
       Serial.println(addr[i]);
     }
+    
   }
 #endif
   artnet.setBroadcast({addr[0], addr[1], addr[2], 255});
   artnet.setArtDmxCallback(onDmxFrame);
-  artnet.setArtSyncCallback(onSync);
+  //artnet.setArtSyncCallback(onSync);
   artnet.setName(nodeName);
   artnet.begin();
 }
 
 void startPixels() {
+  /*
   if (pixelSize == 4) {
     delete rgb;
     delete rgbColor;
@@ -320,55 +328,60 @@ void startPixels() {
   } else {
     delete rgbw;
     delete rgbwColor;
+  */
     if (rgb != NULL) delete rgb;
     rgb = new NeoPixelBus<NeoGrbFeature, NeoEsp32I2s1800KbpsMethod>(pixelCount, LED_PIN);
     rgb->Begin();
     rgbColor = new RgbColor(0);
     show();
-  }
+  //}
 }
 
 void onDmxFrame(uint16_t universe, uint16_t length, uint8_t sequence, uint8_t* data, IPAddress remoteIP) {
-  for (int i = 0; i < length / pixelSize; i++) {
+  for (int i = 0; i < length / 3; i++) {
 #if DEBUG
-    if (data[i * pixelSize] > 128)
+    if (data[i * 3] > 128)
       Serial.print('#');
     else
       Serial.print('.');
 #endif
-    int led = i + (universe - startUniverse) * (previousDataLength / pixelSize);
+    int led = i + (universe - startUniverse) * (previousDataLength / 3);
     //TODO: handle multiple universes
     //see https://github.com/rstephan/ArtnetWifi/blob/master/examples/ArtnetWifiNeoPixel/ArtnetWifiNeoPixel.ino
     if (led < pixelCount) {
-      if (pixelSize == 4) {
-        rgbwColor->R = data[i * pixelSize];
-        rgbwColor->G = data[i * pixelSize + 1];
-        rgbwColor->B = data[i * pixelSize + 2];
-        rgbwColor->W = data[i * pixelSize + 3];
-        rgbw->SetPixelColor(i, *rgbwColor);
-      } else {
-        rgbColor->R = data[i * pixelSize];
-        rgbColor->G = data[i * pixelSize + 1];
-        rgbColor->B = data[i * pixelSize + 2];
+      // if (pixelSize == 4) {
+      //   rgbwColor->R = data[i * 3];
+      //   rgbwColor->G = data[i * 3 + 1];
+      //   rgbwColor->B = data[i * 3 + 2];
+      //   rgbwColor->W = data[i * 3 + 3];
+      //   rgbw->SetPixelColor(i, *rgbwColor);
+      // } else {
+        rgbColor->R = data[i * 3];
+        rgbColor->G = data[i * 3 + 1];
+        rgbColor->B = data[i * 3 + 2];
         rgb->SetPixelColor(i, *rgbColor);
-      }
+      //}
     }
   }
 #if DEBUG
   Serial.println();
 #endif
-  if (!sync) show();
+  //if (!sync) 
+  show();
   previousDataLength = length;
 }
 
+/**
 void onSync(IPAddress remoteIP) {
 #if STATS
   long start = micros();
 #endif
-  if (sync) show();
+  //if (sync) show();
 #if STATS
   Serial.print("Sync delta: ");
   Serial.println((start - lastSync) / 1000);
   lastSync = start;
 #endif
 }
+
+**/

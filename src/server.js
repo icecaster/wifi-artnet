@@ -10,10 +10,8 @@ let settings = {
   ssid: 'test',
   password: 'password',
   nodeName: 'node',
-  pixelSize: 4,
   pixelCount: 60,
   startUniverse: 0,
-  sync: true,
 }
 
 app.get('/settings', (req, res) => {
